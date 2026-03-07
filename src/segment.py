@@ -12,7 +12,7 @@ class Segment_model:
     def segment(self, image, points, labels=None):
         # Run segmentation with the given image, points, and labels
         if not points:
-            return image
+            return None
 
         if labels is None:
             labels = [1] * len(points)

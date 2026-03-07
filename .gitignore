@@ -1,3 +1,5 @@
 .gradio/
 __pycache__/
 *.pyc
+src/pycache/
+models/
