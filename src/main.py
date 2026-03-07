@@ -48,7 +48,7 @@ class Controller:
             # fall back to showing original image when no styles
             img_styled = img
 
-        return points, img_points, img_segmented, img_styled
+        return points, img_points, img_segmented, img_styled1, img_styled2, img_styled
     
     def preprocess(self, img):
         # Resize image to 512x512 for model input
@@ -78,7 +78,11 @@ if __name__ == "__main__":
                 # Segmentation Editing Outputs
                 with gr.Row():
                     img_segmentation = gr.Image(type="pil", label="Segmentation")
-                    img_style_transfer = gr.Image(type="pil", label="Style Transfer")
+                    img_style_seg = gr.Image(type="pil", label="Style Transfer Segmented")
+
+                with gr.Row():
+                    img_style1 = gr.Image(type="pil", label="Style Transfer 1")
+                    img_style2 = gr.Image(type="pil", label="Style Transfer 2")
 
                 # Buttons for Segmentation
                 with gr.Row():
@@ -102,11 +106,11 @@ if __name__ == "__main__":
         
         img_input.select(controller.update, 
             inputs=[img_input, img_style_1, img_style_2, points_state, mode_state, gr.State("add")], 
-            outputs=[points_state, img_points, img_segmentation, img_style_transfer])
+            outputs=[points_state, img_points, img_segmentation, img_style1, img_style2, img_style_seg])
         
         img_points.select(controller.update, 
             inputs=[img_input, img_style_1, img_style_2, points_state, mode_state, gr.State("remove")], 
-            outputs=[points_state, img_points, img_segmentation, img_style_transfer])
+            outputs=[points_state, img_points, img_segmentation, img_style1, img_style2, img_style_seg])
         
         btn_toggle.click(controller.interface.toggle_mode, 
             inputs=[mode_state], 
@@ -114,6 +118,6 @@ if __name__ == "__main__":
         
         btn_reset.click(controller.interface.reset_points, 
             inputs=[img_input], 
-            outputs=[points_state, img_points, img_segmentation, img_style_transfer])
+            outputs=[points_state, img_points, img_segmentation, img_style1, img_style2, img_style_seg])
 
     demo.launch(share=False)

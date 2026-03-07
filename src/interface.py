@@ -70,68 +70,15 @@ class Interface:
         
         return Image.fromarray(img)
     
-    def visualize_style_transfer(self, img_styled1, img_styled2, mask):
-        # Mix two styled results by mask. Works with tensors or PIL images.
-        def to_float_array(img):
-            if img is None:
-                return None
-            if hasattr(img, 'cpu'):
-                arr = img.cpu().numpy()
-                # expected tensor shape (C,H,W)
-                if arr.ndim == 4:
-                    arr = arr[0]
-                arr = arr.transpose(1, 2, 0)
-                return arr.astype(np.float32)
-            # PIL Image
-            arr = np.array(img).astype(np.float32) / 255.0
-            if arr.ndim == 2:
-                arr = np.stack([arr, arr, arr], axis=-1)
-            return arr
+    def visualize_style_transfer(self, img1, img2, mask):
+        arr1 = np.array(img1).astype(np.float32) / 255.0
+        arr2 = np.array(img2).astype(np.float32) / 255.0
+        mask_arr = np.array(mask).astype(np.float32)
+        mask_arr = mask_arr[..., None]
 
-        def to_pil(arr):
-            arr = (arr * 255.0).clip(0, 255).astype(np.uint8)
-            return Image.fromarray(arr)
+        blended = arr1 * mask_arr + arr2 * (1 - mask_arr)
 
-        if img_styled1 is None and img_styled2 is None:
-            return None
-
-        if mask is None:
-            # just return first available styled output
-            styled = img_styled1 if img_styled1 is not None else img_styled2
-            if styled is None:
-                return None
-            if hasattr(styled, 'cpu'):
-                return to_pil(to_float_array(styled))
-            return styled
-
-        # mask exists: blend
-        mask_arr = np.array(mask)
-        if mask_arr.ndim == 3 and mask_arr.shape[2] == 1:
-            mask_arr = mask_arr[..., 0]
-        if mask_arr.ndim == 3:
-            # if mask has 3 channels, reduce to one
-            mask_arr = mask_arr[..., 0]
-
-        mask_arr = mask_arr.astype(np.float32)
-        if mask_arr.max() > 1.0:
-            mask_arr = mask_arr / 255.0
-        mask_arr = mask_arr.clip(0.0, 1.0)
-        mask_arr = mask_arr[..., None]  # (H,W,1)
-
-        arr1 = to_float_array(img_styled1) if img_styled1 is not None else None
-        arr2 = to_float_array(img_styled2) if img_styled2 is not None else None
-
-        if arr1 is None:
-            arr1 = arr2
-        if arr2 is None:
-            arr2 = arr1
-
-        if arr1.shape[:2] != mask_arr.shape[:2]:
-            # fall back to returning the first style if sizes mismatch
-            return to_pil(arr1)
-
-        blended = arr1 * mask_arr + arr2 * (1.0 - mask_arr)
-        return to_pil(blended)
+        return Image.fromarray((blended * 255).astype(np.uint8))
 
 
     def toggle_mode(self, mode):

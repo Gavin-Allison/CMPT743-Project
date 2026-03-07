@@ -24,7 +24,6 @@ class IPAdapter:
         self.pipe.set_ip_adapter_scale(0.7)
 
     def stylize(self, content, style):
-
         result = self.pipe(
             prompt="",
             image=content,
