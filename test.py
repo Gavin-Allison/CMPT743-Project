@@ -12,7 +12,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 
 pipe = StableDiffusionPipeline.from_pretrained(
     "runwayml/stable-diffusion-v1-5",
-    torch_dtype=torch.float16 if device == "cuda" else torch.float32
+    torch_dtype=torch.float32
 ).to(device)
 
 tokenizer = pipe.tokenizer
@@ -82,6 +82,10 @@ for step in range(num_steps):
 
     if step % 50 == 0:
         print(f"Step {step}, loss = {loss.item():.4f}")
+        torch.save({
+            "token_str": "<v_star>",
+            "embedding": v_star.detach().cpu()
+        }, "v_star.pt")
 
 # -------------------------------
 # 5. Generate image using learned token
