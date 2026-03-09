@@ -38,7 +38,7 @@ with torch.no_grad():
 # -------------------------------
 # 3. Load source image
 # -------------------------------
-source = Image.open("source.png").convert("RGB").resize((64, 64))
+source = Image.open("source.png").convert("RGB").resize((512, 512))
 source_tensor = torch.from_numpy(np.array(source)/255.0).permute(2,0,1).unsqueeze(0).to(device, dtype=torch.float32)
 
 latents = vae.encode(source_tensor).latent_dist.sample() * 0.18215
@@ -46,14 +46,14 @@ latents = vae.encode(source_tensor).latent_dist.sample() * 0.18215
 # -------------------------------
 # 4. Load foreground mask (binary)
 # -------------------------------
-mask_fg = Image.open("mask.png").convert("L").resize((64, 64))
+mask_fg = Image.open("mask.png").convert("L").resize((512, 512))
 mask_fg = torch.from_numpy(np.array(mask_fg)/255.0).unsqueeze(0).unsqueeze(0).to(device, dtype=torch.float32)
 mask_bg = 1 - mask_fg
 
 # -------------------------------
 # 5. Training loop
 # -------------------------------
-optimizer = Adam([v_fg, v_bg], lr=1e-4)
+optimizer = Adam([v_fg, v_bg], lr=1e-5)
 prompt = f"a photo of {token_fg} and {token_bg}"
 num_steps = 50
 
@@ -67,18 +67,18 @@ for step in range(num_steps):
     noise = torch.randn_like(latents)
     noisy_latent = scheduler.add_noise(latents, noise, t)
 
-    # Predict noise
     pred = unet(noisy_latent, t, encoder_hidden_states=embeddings).sample
-
-    # Split prediction into foreground & background
     combined_pred = pred * mask_fg + pred * mask_bg
-
-    # Loss over regions
     loss = ((combined_pred - noise) ** 2).mean()
 
     optimizer.zero_grad()
     loss.backward()
     optimizer.step()
+
+    # clamp embeddings to avoid blowup
+    with torch.no_grad():
+        v_fg.clamp_(-5.0, 5.0)
+        v_bg.clamp_(-5.0, 5.0)
 
     if step % 10 == 0:
         print(f"Step {step}, loss = {loss.item():.4f}")
@@ -87,6 +87,6 @@ for step in range(num_steps):
 # 6. Generate composed image
 # -------------------------------
 final_prompt = f"a photo of {token_fg} and {token_bg}"
-generated_image = pipe(final_prompt, height=64, width=64, num_inference_steps=20).images[0]
+generated_image = pipe(final_prompt, height=512, width=512, num_inference_steps=25).images[0]
 generated_image.save("composed_vstar_fg_bg.png")
 generated_image.show()
