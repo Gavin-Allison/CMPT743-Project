@@ -6,12 +6,14 @@ from segment import Segment_model
 from interface import Interface
 from AdaIN import AdaIN
 from IPAdapter import IPAdapter
+from diffusion import Diffusion_model
 
 class Controller:
-    def __init__(self, segmenter, interface, style_model):
+    def __init__(self, segmenter, interface, style_model, diffusion_model):
         self.segmenter = segmenter
         self.interface = interface
         self.style_model = style_model
+        self.diffusion_model = diffusion_model
 
     def style_transfer(self, img, style1, style2):
         img_styled1 = self.style_model.stylize(img, style1)
@@ -48,7 +50,9 @@ class Controller:
             # fall back to showing original image when no styles
             img_styled = img
 
-        return points, img_points, img_segmented, img_styled1, img_styled2, img_styled
+        img_refined = self.diffusion_model.refine(img_styled)
+        
+        return points, img_points, img_segmented, img_styled1, img_styled2, img_styled, img_refined
     
     def preprocess(self, img):
         # Resize image to 512x512 for model input
@@ -61,8 +65,9 @@ if __name__ == "__main__":
     interface = Interface()
     adain_model = AdaIN()
     ip_adapter_model = IPAdapter()
+    diffusion_model = Diffusion_model()
 
-    controller = Controller(segmenter, interface, ip_adapter_model)
+    controller = Controller(segmenter, interface, ip_adapter_model, diffusion_model)
 
     with gr.Blocks() as demo:
         points_state = gr.State([])
@@ -106,11 +111,11 @@ if __name__ == "__main__":
         
         img_input.select(controller.update, 
             inputs=[img_input, img_style_1, img_style_2, points_state, mode_state, gr.State("add")], 
-            outputs=[points_state, img_points, img_segmentation, img_style1, img_style2, img_style_seg])
+            outputs=[points_state, img_points, img_segmentation, img_style1, img_style2, img_style_seg, img_output_3])
         
         img_points.select(controller.update, 
             inputs=[img_input, img_style_1, img_style_2, points_state, mode_state, gr.State("remove")], 
-            outputs=[points_state, img_points, img_segmentation, img_style1, img_style2, img_style_seg])
+            outputs=[points_state, img_points, img_segmentation, img_style1, img_style2, img_style_seg, img_output_3])
         
         btn_toggle.click(controller.interface.toggle_mode, 
             inputs=[mode_state], 
@@ -118,6 +123,6 @@ if __name__ == "__main__":
         
         btn_reset.click(controller.interface.reset_points, 
             inputs=[img_input], 
-            outputs=[points_state, img_points, img_segmentation, img_style1, img_style2, img_style_seg])
+            outputs=[points_state, img_points, img_segmentation, img_style1, img_style2, img_style_seg, img_output_3])
 
     demo.launch(share=False)
