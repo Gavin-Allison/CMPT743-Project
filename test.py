@@ -55,7 +55,7 @@ for name, param in unet.named_parameters():
 
 optimizer = Adam(params_to_optimize, lr=1e-4)
 prompt = f"a photo of {concept_token_str}"
-num_steps = 500
+num_steps = 200
 
 for step in range(num_steps):
     # 1. Tokenize prompt

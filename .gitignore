@@ -3,3 +3,4 @@ __pycache__/
 *.pyc
 src/pycache/
 models/
+v_star.pt
