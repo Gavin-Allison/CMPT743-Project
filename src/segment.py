@@ -17,8 +17,8 @@ class Segment_model:
         if labels is None:
             labels = [1] * len(points)
 
-        input_points = torch.tensor([points], dtype=torch.float).to(self.device)
-        input_labels = torch.tensor([labels], dtype=torch.int).to(self.device)
+        input_points = torch.tensor([points], dtype=torch.float)
+        input_labels = torch.tensor([labels], dtype=torch.int)
 
         inputs = self.processor(
             images=image,

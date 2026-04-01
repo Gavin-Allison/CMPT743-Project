@@ -6,7 +6,7 @@ from segment import Segment_model
 from interface import Interface
 from AdaIN import AdaIN
 from IPAdapter import IPAdapter
-from diffusion import Diffusion_model
+from diffusion import LatentCompositeDiffusion
 
 class Controller:
     def __init__(self, segmenter, interface, style_model, diffusion_model):
@@ -29,6 +29,10 @@ class Controller:
         labels = [p[2] for p in points]
         
         return self.segmenter.segment(img, coords, labels)
+    
+    def refine_diffusion(self, fg_img, bg_img, mask, prompt=""):
+        self.diffusion_model.train(fg_img, bg_img, mask, prompt=prompt)
+        return self.diffusion_model.generate()
 
     def update(self, img, style1, style2, points, mode, action, evt: gr.SelectData):
         # Update interface points, then segment, then return updated values
@@ -50,7 +54,7 @@ class Controller:
             # fall back to showing original image when no styles
             img_styled = img
 
-        img_refined = self.diffusion_model.refine(img_styled)
+        img_refined = self.refine_diffusion(img_styled1, img_styled2, mask)
         
         return points, img_points, img_segmented, img_styled1, img_styled2, img_styled, img_refined
     
@@ -65,7 +69,7 @@ if __name__ == "__main__":
     interface = Interface()
     adain_model = AdaIN()
     ip_adapter_model = IPAdapter()
-    diffusion_model = Diffusion_model()
+    diffusion_model = LatentCompositeDiffusion()
 
     controller = Controller(segmenter, interface, ip_adapter_model, diffusion_model)
 
@@ -125,4 +129,4 @@ if __name__ == "__main__":
             inputs=[img_input], 
             outputs=[points_state, img_points, img_segmentation, img_style1, img_style2, img_style_seg, img_output_3])
 
-    demo.launch(share=False)
+    demo.launch(share=True)

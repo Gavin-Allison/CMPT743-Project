@@ -93,4 +93,3 @@ for step in range(num_steps):
 final_prompt = f"a photo of {concept_token_str}"
 generated_image = pipe(final_prompt, height=512, width=512, num_inference_steps=50).images[0]
 generated_image.save("v_star_full.png")
-generated_image.show()
