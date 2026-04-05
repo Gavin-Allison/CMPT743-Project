@@ -30,8 +30,8 @@ class LatentCompositeDiffusion:
         self.vae.requires_grad_(False)
         self.unet.requires_grad_(True)
 
-        # Extend UNet for extra channels (fg/bg + mask)
-        self._extend_unet_channels(extra_channels=4 + 4 + 1)
+        # Store original conv_in for resetting
+        self.original_conv_in = self.unet.conv_in
 
         # Mask embedder layers
         self.embed_mask = nn.Sequential(
@@ -45,6 +45,7 @@ class LatentCompositeDiffusion:
         self.cross_attention_k = nn.Linear(4, 4).to(self.device)
         self.cross_attention_v = nn.Linear(4, 4).to(self.device)
         self.cross_attention_out = nn.Linear(4, 4).to(self.device)
+        self.attention_weight = nn.Parameter(torch.tensor(0.0, device=self.device))
 
     def _cross_attention(self, x, mask_emb):
         B,C,H,W = x.shape
@@ -57,7 +58,7 @@ class LatentCompositeDiffusion:
         out = attn @ V
         out = self.cross_attention_out(out)
         out = out.transpose(1,2).reshape(B,C,H,W)
-        return x + out
+        return x + self.attention_weight * out
 
     def _extend_unet_channels(self, extra_channels: int):
         old_conv = self.unet.conv_in
@@ -74,8 +75,8 @@ class LatentCompositeDiffusion:
             new_conv.bias = old_conv.bias
         self.unet.conv_in = new_conv.to(self.device)
 
-    def train(self, fg_img, bg_img, mask, prompt="", 
-              lr=1e-5, steps=1000):
+    def train(self, fg_img, bg_img, mask, prompt="high quality, cohesive image, consistent lighting", 
+              lr=1e-5, steps=200):
         device = self.device
         
         # Image Encoding
@@ -96,9 +97,8 @@ class LatentCompositeDiffusion:
         mask = mask / mask.max()
         mask = torch.from_numpy(mask).unsqueeze(0).unsqueeze(0).to(device, dtype=torch.float32)
         mask_latent = F.interpolate(mask, size=fg_latent.shape[-2:], mode="bilinear", align_corners=False)
-        mask_latent = F.avg_pool2d(mask_latent, kernel_size=3, stride=1, padding=1)
-        mask_emb = self.embed_mask(mask_latent)
-
+        mask_latent = mask_latent.clamp(0.0, 1.0)
+        
         # Hard composite target
         target_latent = fg_latent * mask_latent + bg_latent * (1 - mask_latent)
 
@@ -107,21 +107,36 @@ class LatentCompositeDiffusion:
         with torch.no_grad():
             encoder_hidden_states = self.text_encoder(text_input).last_hidden_state
 
-        optimizer = Adam(self.unet.parameters(), lr=lr)
-        self.scheduler.set_timesteps(1000)
+        # Reset UNet conv_in to original before extending
+        self.unet.conv_in = self.original_conv_in
+
+        # Extend UNet for extra channels (fg/bg + mask) - done here to avoid affecting other uses
+        self._extend_unet_channels(extra_channels=4 + 4 + 1)
+
+        optimizer = Adam(
+            list(self.unet.parameters()) +
+            list(self.embed_mask.parameters()) +
+            list(self.cross_attention_q.parameters()) +
+            list(self.cross_attention_k.parameters()) +
+            list(self.cross_attention_v.parameters()) +
+            list(self.cross_attention_out.parameters()) +
+            [self.attention_weight],
+            lr=lr
+        )
+        self.scheduler.set_timesteps(steps)
 
         for step in range(steps):
+            mask_emb = self.embed_mask(mask_latent)
+
             t = torch.randint(0, self.scheduler.num_train_timesteps, (1,), device=device).long()
             noise = torch.randn_like(target_latent)
             noisy = self.scheduler.add_noise(target_latent, noise, t)
 
-            model_input = torch.cat([noisy, fg_latent, bg_latent, mask_latent], dim=1)
+            model_input = torch.cat([noisy, fg_latent, bg_latent * (1 - mask_latent), mask_latent], dim=1)
             noise_pred = self.unet(model_input, t, encoder_hidden_states=encoder_hidden_states).sample
-            noise_pred = self._cross_attention(noise_pred, mask_emb)
+            noise_pred = self._cross_attention(noise_pred, mask_emb.detach())
 
-            edge_kernel = torch.tensor([[[[-1,-1,-1],[-1,8,-1],[-1,-1,-1]]]], dtype=torch.float32, device=device)
-            edge_weight = F.conv2d(mask_latent, weight=edge_kernel, padding=1)
-            loss = ((noise_pred - noise)**2 * (1 + edge_weight)).mean()
+            loss = ((noise_pred - noise)**2).mean()
 
             optimizer.zero_grad()
             loss.backward()
@@ -133,13 +148,14 @@ class LatentCompositeDiffusion:
         self.fg_latent = fg_latent
         self.bg_latent = bg_latent
         self.mask_latent = mask_latent
+        self.target_latent = target_latent
         self.encoder_hidden_states = encoder_hidden_states
 
     def generate(self, steps=200):
         latents = torch.randn_like(self.fg_latent)
         self.scheduler.set_timesteps(steps)
         for t in self.scheduler.timesteps:
-            model_input = torch.cat([latents, self.fg_latent, self.bg_latent, self.mask_latent], dim=1)
+            model_input = torch.cat([latents, self.fg_latent, self.bg_latent * (1 - self.mask_latent), self.mask_latent], dim=1)
             with torch.no_grad():
                 noise_pred = self.unet(model_input, t, encoder_hidden_states=self.encoder_hidden_states).sample
             latents = self.scheduler.step(noise_pred, t, latents).prev_sample

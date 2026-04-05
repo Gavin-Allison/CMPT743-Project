@@ -4,7 +4,6 @@ from PIL import Image
 
 from segment import Segment_model
 from interface import Interface
-from AdaIN import AdaIN
 from IPAdapter import IPAdapter
 from diffusion import LatentCompositeDiffusion
 
@@ -67,7 +66,6 @@ class Controller:
 if __name__ == "__main__":
     segmenter = Segment_model()
     interface = Interface()
-    adain_model = AdaIN()
     ip_adapter_model = IPAdapter()
     diffusion_model = LatentCompositeDiffusion()
 
